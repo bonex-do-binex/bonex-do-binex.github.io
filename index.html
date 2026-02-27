@@ -3,16 +3,16 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Cyber Racer Ultra v6</title>
+  <title>Horizon Racer – V1</title>
   <style>
-    body { margin: 0; overflow: hidden; background: #000; font-family: 'Courier New', Courier, monospace; }
+    body { margin: 0; overflow: hidden; background: #87CEEB; font-family: 'Segoe UI', sans-serif; }
     #ui { 
-      position: absolute; bottom: 20px; left: 20px; color: #0ff; 
-      font-size: 2rem; font-weight: bold; text-shadow: 0 0 10px #0ff;
-      pointer-events: none; z-index: 10;
+      position: absolute; bottom: 40px; right: 40px; color: white; 
+      text-align: right; pointer-events: none; z-index: 10;
     }
+    #speed { font-size: 4rem; font-weight: 900; italic; line-height: 1; }
+    #unit { font-size: 1.5rem; font-weight: 300; opacity: 0.8; }
   </style>
-
   <script type="importmap">
     {
       "imports": {
@@ -23,8 +23,10 @@
   </script>
 </head>
 <body>
-  <div id="ui">SPD: <span id="speedCounter">0</span> km/h</div>
-
+  <div id="ui">
+    <div id="speed"><span id="speedCounter">0</span></div>
+    <div id="unit">KM/H</div>
+  </div>
   <script type="module" src="./game.js"></script>
 </body>
 </html>
