@@ -1,275 +1,145 @@
-// VERSION: V3
-console.log("Open World Racer – VERSION: V3");
+import * as THREE from "three";
+import { Sky } from "three/addons/objects/Sky.js";
+import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
 
-import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
-import { Sky } from "https://unpkg.com/three@0.160.0/examples/jsm/objects/Sky.js";
-import { EffectComposer } from "https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/EffectComposer.js";
-import { RenderPass } from "https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/RenderPass.js";
-import { UnrealBloomPass } from "https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/UnrealBloomPass.js";
-
-const renderer = new THREE.WebGLRenderer({ antialias:true });
+// --- ENGINE SETUP ---
+const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.4;
+renderer.toneMapping = THREE.ReinhardToneMapping;
 document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 20000);
-camera.position.set(0, 10, -30);
+scene.fog = new THREE.FogExp2(0x020205, 0.002);
 
-// SKY
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 15000);
+
+// --- LIGHTING & SKY ---
 const sky = new Sky();
 sky.scale.setScalar(10000);
 scene.add(sky);
+sky.material.uniforms['sunPosition'].value.set(0, -1, -1); // Night-time vibe
 
-const skyUniforms = sky.material.uniforms;
-skyUniforms.turbidity.value = 10;
-skyUniforms.rayleigh.value = 2;
-skyUniforms.mieCoefficient.value = 0.005;
-skyUniforms.mieDirectionalG.value = 0.8;
-
-const sunPos = new THREE.Vector3();
-function updateSun() {
-  const phi = THREE.MathUtils.degToRad(80);
-  const theta = THREE.MathUtils.degToRad(180);
-  sunPos.setFromSphericalCoords(1, phi, theta);
-  sky.material.uniforms.sunPosition.value.copy(sunPos);
-}
-updateSun();
-
-// LIGHTS
-const sun = new THREE.DirectionalLight(0xffffff, 3);
-sun.position.set(500, 800, 500);
+const sun = new THREE.DirectionalLight(0x5555ff, 1.5);
+sun.position.set(50, 100, 50);
 sun.castShadow = true;
-sun.shadow.mapSize.set(4096,4096);
-sun.shadow.camera.near = 1;
-sun.shadow.camera.far = 3000;
-sun.shadow.camera.left = -400;
-sun.shadow.camera.right = 400;
-sun.shadow.camera.top = 400;
-sun.shadow.camera.bottom = -400;
 scene.add(sun);
+scene.add(new THREE.AmbientLight(0x111122, 0.5));
 
-scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+// --- ADVANCED CAR MODEL ---
+const car = new THREE.Group();
 
-// TERRAIN
-const groundGeo = new THREE.PlaneGeometry(8000,8000,300,300);
-groundGeo.rotateX(-Math.PI/2);
-
-const verts = groundGeo.attributes.position;
-for (let i = 0; i < verts.count; i++) {
-  const x = verts.getX(i);
-  const z = verts.getZ(i);
-  const y = Math.sin(x*0.002)*10 + Math.cos(z*0.002)*10;
-  verts.setY(i,y);
-}
-groundGeo.computeVertexNormals();
-
-function makeGrassTexture() {
-  const c = document.createElement("canvas");
-  c.width = 256; c.height = 256;
-  const ctx = c.getContext("2d");
-  for (let i = 0; i < 5000; i++) {
-    ctx.fillStyle = `hsl(${100 + Math.random()*40}, 60%, ${30 + Math.random()*20}%)`;
-    ctx.fillRect(Math.random()*256, Math.random()*256, 3, 3);
-  }
-  return new THREE.CanvasTexture(c);
-}
-
-const grassTex = makeGrassTexture();
-grassTex.wrapS = grassTex.wrapT = THREE.RepeatWrapping;
-grassTex.repeat.set(40,40);
-
-const ground = new THREE.Mesh(
-  groundGeo,
-  new THREE.MeshStandardMaterial({
-    map: grassTex,
-    roughness: 1
-  })
+// Lower Chassis
+const chassis = new THREE.Mesh(
+    new THREE.BoxGeometry(4, 0.6, 9),
+    new THREE.MeshPhysicalMaterial({ color: 0x111111, metalness: 1, roughness: 0.2 })
 );
-ground.receiveShadow = true;
-scene.add(ground);
+chassis.position.y = 0.8;
+car.add(chassis);
 
-// ROAD
-function makeRoadTexture(){
-  const c = document.createElement("canvas");
-  c.width = 512; c.height = 512;
-  const ctx = c.getContext("2d");
-
-  ctx.fillStyle="#2a2a2a";
-  ctx.fillRect(0,0,512,512);
-
-  ctx.strokeStyle="#ffffff";
-  ctx.lineWidth=10;
-  ctx.setLineDash([60,40]);
-  ctx.beginPath();
-  ctx.moveTo(256,0);
-  ctx.lineTo(256,512);
-  ctx.stroke();
-
-  return new THREE.CanvasTexture(c);
-}
-
-const roadTex = makeRoadTexture();
-roadTex.wrapS = roadTex.wrapT = THREE.RepeatWrapping;
-roadTex.repeat.set(1,100);
-
-const road = new THREE.Mesh(
-  new THREE.PlaneGeometry(60,8000),
-  new THREE.MeshStandardMaterial({
-    map: roadTex,
-    roughness:0.8
-  })
+// Body Shell (Sleek Shape)
+const body = new THREE.Mesh(
+    new THREE.CylinderGeometry(1.5, 2, 8, 4),
+    new THREE.MeshPhysicalMaterial({ color: 0xff0033, metalness: 0.8, roughness: 0.1, clearcoat: 1 })
 );
-road.rotation.x = -Math.PI/2;
-road.position.y = 0.3;
+body.rotation.x = Math.PI / 2;
+body.rotation.y = Math.PI / 4;
+body.position.y = 1.5;
+body.scale.set(1, 1, 0.5);
+car.add(body);
+
+// Neon Underglow
+const underlight = new THREE.PointLight(0x00f2ff, 5, 15);
+underlight.position.y = 0.5;
+car.add(underlight);
+
+// Wheels
+const wheelGeo = new THREE.CylinderGeometry(0.7, 0.7, 0.6, 16);
+const wheelMat = new THREE.MeshStandardMaterial({ color: 0x050505 });
+const wheelPositions = [[1.8, 0.7, 2.5], [-1.8, 0.7, 2.5], [1.8, 0.7, -2.5], [-1.8, 0.7, -2.5]];
+const wheels = wheelPositions.map(pos => {
+    const w = new THREE.Mesh(wheelGeo, wheelMat);
+    w.rotation.z = Math.PI / 2;
+    w.position.set(...pos);
+    car.add(w);
+    return w;
+});
+
+scene.add(car);
+
+// --- ENVIRONMENT: CITY & ROAD ---
+// Detailed Road
+const roadTex = new THREE.MeshStandardMaterial({ color: 0x080808, roughness: 0.1, metalness: 0.5 });
+const road = new THREE.Mesh(new THREE.PlaneGeometry(60, 20000), roadTex);
+road.rotation.x = -Math.PI / 2;
 road.receiveShadow = true;
 scene.add(road);
 
-// BUILDINGS
-function makeWindowTexture() {
-  const c = document.createElement("canvas");
-  c.width = 64; c.height = 64;
-  const ctx = c.getContext("2d");
-
-  ctx.fillStyle = "#333";
-  ctx.fillRect(0,0,64,64);
-
-  for (let i = 0; i < 200; i++) {
-    ctx.fillStyle = Math.random() > 0.5 ? "#ffd27f" : "#222";
-    ctx.fillRect(Math.random()*64, Math.random()*64, 4, 4);
-  }
-
-  return new THREE.CanvasTexture(c);
+// Procedural Buildings
+const buildGeo = new THREE.BoxGeometry(1, 1, 1);
+for (let i = 0; i < 300; i++) {
+    const h = 20 + Math.random() * 150;
+    const w = 20 + Math.random() * 30;
+    const bMat = new THREE.MeshStandardMaterial({ 
+        color: 0x111111, 
+        emissive: 0x00f2ff, 
+        emissiveIntensity: Math.random() > 0.8 ? 0.5 : 0 
+    });
+    const b = new THREE.Mesh(buildGeo, bMat);
+    b.scale.set(w, h, w);
+    b.position.set(
+        (Math.random() - 0.5) * 2000 + (Math.sign(Math.random() - 0.5) * 150),
+        h / 2,
+        (Math.random() - 0.5) * 10000
+    );
+    scene.add(b);
 }
 
-const windowTex = makeWindowTexture();
-windowTex.wrapS = windowTex.wrapT = THREE.RepeatWrapping;
-windowTex.repeat.set(4,4);
-
-for (let i = 0; i < 400; i++) {
-  const h = Math.random()*150+20;
-
-  const building = new THREE.Mesh(
-    new THREE.BoxGeometry(50,h,50),
-    new THREE.MeshStandardMaterial({
-      map: windowTex,
-      emissive: 0x222222,
-      emissiveIntensity: 0.7,
-      roughness:0.6,
-      metalness:0.3
-    })
-  );
-
-  building.position.set(
-    (Math.random()-0.5)*6000,
-    h/2,
-    (Math.random()-0.5)*6000
-  );
-
-  building.castShadow = true;
-  scene.add(building);
-}
-
-// CAR
-const car = new THREE.Group();
-scene.add(car);
-
-const body = new THREE.Mesh(
-  new THREE.BoxGeometry(5,1.5,10),
-  new THREE.MeshPhysicalMaterial({
-    color:0xff0000,
-    metalness:1,
-    roughness:0.15,
-    clearcoat:1,
-    clearcoatRoughness:0.03,
-    reflectivity:1
-  })
-);
-body.position.y = 4;
-body.castShadow = true;
-car.add(body);
-
-const glass = new THREE.Mesh(
-  new THREE.BoxGeometry(3.5,1.2,4),
-  new THREE.MeshPhysicalMaterial({
-    color:0x111111,
-    transparent:true,
-    opacity:0.4,
-    roughness:0.05,
-    metalness:1
-  })
-);
-glass.position.set(0,5,-1);
-car.add(glass);
-
-const wheels = [];
-function wheel(x,z){
-  const w = new THREE.Mesh(
-    new THREE.CylinderGeometry(1.5,1.5,1.2,32),
-    new THREE.MeshStandardMaterial({color:0x111111, metalness:0.4})
-  );
-  w.rotation.z = Math.PI/2;
-  w.position.set(x,1.5,z);
-  w.castShadow = true;
-  car.add(w);
-  wheels.push(w);
-}
-
-wheel(-2.5,4);
-wheel(2.5,4);
-wheel(-2.5,-4);
-wheel(2.5,-4);
-
-car.position.y = 6;
-
-// CONTROLS
-let speed = 0;
-const keys = {};
-
-document.addEventListener("keydown", e => keys[e.key] = true);
-document.addEventListener("keyup", e => keys[e.key] = false);
-
-// POST-PROCESSING
+// --- POST-PROCESSING ---
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
-
-const bloom = new UnrealBloomPass(
-  new THREE.Vector2(window.innerWidth, window.innerHeight),
-  0.6, 0.9, 0.85
-);
+const bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.2, 0.4, 0.1);
 composer.addPass(bloom);
 
-// LOOP
-function animate(){
-  requestAnimationFrame(animate);
+// --- LOGIC ---
+let speed = 0;
+const keys = {};
+window.onkeydown = (e) => keys[e.key.toLowerCase()] = true;
+window.onkeyup = (e) => keys[e.key.toLowerCase()] = false;
 
-  if (keys["w"]) speed += 0.25;
-  if (keys["s"]) speed -= 0.25;
+function animate() {
+    requestAnimationFrame(animate);
 
-  speed *= 0.98;
+    // Physics
+    if (keys['w']) speed += 0.4;
+    if (keys['s']) speed -= 0.4;
+    speed *= 0.97; // Drag
 
-  if (keys["a"]) car.rotation.y += 0.04*(speed/10);
-  if (keys["d"]) car.rotation.y -= 0.04*(speed/10);
+    if (keys['a']) car.rotation.y += 0.003 * speed;
+    if (keys['d']) car.rotation.y -= 0.003 * speed;
 
-  car.translateZ(speed);
+    car.translateZ(speed * 0.1);
+    wheels.forEach(w => w.rotation.x += speed * 0.1);
 
-  wheels.forEach(w => w.rotation.x += speed*0.25);
+    // Camera follow (Smooth Lerp)
+    const goal = new THREE.Vector3(0, 10, -25);
+    goal.applyQuaternion(car.quaternion);
+    goal.add(car.position);
+    camera.position.lerp(goal, 0.1);
+    camera.lookAt(car.position.x, car.position.y + 2, car.position.z);
 
-  const camOffset = new THREE.Vector3(0,12,-40);
-  camOffset.applyMatrix4(car.matrixWorld);
-  camera.position.lerp(camOffset,0.08);
-  camera.lookAt(car.position);
+    document.getElementById('speed').innerText = Math.abs(Math.round(speed * 2));
 
-  composer.render();
+    composer.render();
 }
 animate();
 
-window.addEventListener("resize", () => {
-  camera.aspect = window.innerWidth/window.innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  composer.setSize(window.innerWidth, window.innerHeight);
+window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    composer.setSize(window.innerWidth, window.innerHeight);
 });
