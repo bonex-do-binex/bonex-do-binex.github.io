@@ -1,12 +1,11 @@
+// VERSION: V3
+console.log("Open World Racer – VERSION: V3");
+
 import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
 import { Sky } from "https://unpkg.com/three@0.160.0/examples/jsm/objects/Sky.js";
 import { EffectComposer } from "https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/EffectComposer.js";
 import { RenderPass } from "https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/UnrealBloomPass.js";
-
-//////////////////////
-// RENDERER
-//////////////////////
 
 const renderer = new THREE.WebGLRenderer({ antialias:true });
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -16,27 +15,20 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.4;
 document.body.appendChild(renderer.domElement);
 
-//////////////////////
-// SCENE + CAMERA
-//////////////////////
-
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 20000);
 camera.position.set(0, 10, -30);
 
-//////////////////////
-// SKY (Physical)
-//////////////////////
-
+// SKY
 const sky = new Sky();
 sky.scale.setScalar(10000);
 scene.add(sky);
 
 const skyUniforms = sky.material.uniforms;
-skyUniforms["turbidity"].value = 10;
-skyUniforms["rayleigh"].value = 2;
-skyUniforms["mieCoefficient"].value = 0.005;
-skyUniforms["mieDirectionalG"].value = 0.8;
+skyUniforms.turbidity.value = 10;
+skyUniforms.rayleigh.value = 2;
+skyUniforms.mieCoefficient.value = 0.005;
+skyUniforms.mieDirectionalG.value = 0.8;
 
 const sunPos = new THREE.Vector3();
 function updateSun() {
@@ -47,10 +39,7 @@ function updateSun() {
 }
 updateSun();
 
-//////////////////////
-// LIGHTING
-//////////////////////
-
+// LIGHTS
 const sun = new THREE.DirectionalLight(0xffffff, 3);
 sun.position.set(500, 800, 500);
 sun.castShadow = true;
@@ -65,15 +54,12 @@ scene.add(sun);
 
 scene.add(new THREE.AmbientLight(0xffffff, 0.6));
 
-//////////////////////
 // TERRAIN
-//////////////////////
-
 const groundGeo = new THREE.PlaneGeometry(8000,8000,300,300);
 groundGeo.rotateX(-Math.PI/2);
 
 const verts = groundGeo.attributes.position;
-for(let i=0;i<verts.count;i++){
+for (let i = 0; i < verts.count; i++) {
   const x = verts.getX(i);
   const z = verts.getZ(i);
   const y = Math.sin(x*0.002)*10 + Math.cos(z*0.002)*10;
@@ -85,7 +71,6 @@ function makeGrassTexture() {
   const c = document.createElement("canvas");
   c.width = 256; c.height = 256;
   const ctx = c.getContext("2d");
-
   for (let i = 0; i < 5000; i++) {
     ctx.fillStyle = `hsl(${100 + Math.random()*40}, 60%, ${30 + Math.random()*20}%)`;
     ctx.fillRect(Math.random()*256, Math.random()*256, 3, 3);
@@ -107,10 +92,7 @@ const ground = new THREE.Mesh(
 ground.receiveShadow = true;
 scene.add(ground);
 
-//////////////////////
 // ROAD
-//////////////////////
-
 function makeRoadTexture(){
   const c = document.createElement("canvas");
   c.width = 512; c.height = 512;
@@ -146,10 +128,7 @@ road.position.y = 0.3;
 road.receiveShadow = true;
 scene.add(road);
 
-//////////////////////
 // BUILDINGS
-//////////////////////
-
 function makeWindowTexture() {
   const c = document.createElement("canvas");
   c.width = 64; c.height = 64;
@@ -170,7 +149,7 @@ const windowTex = makeWindowTexture();
 windowTex.wrapS = windowTex.wrapT = THREE.RepeatWrapping;
 windowTex.repeat.set(4,4);
 
-for(let i=0;i<400;i++){
+for (let i = 0; i < 400; i++) {
   const h = Math.random()*150+20;
 
   const building = new THREE.Mesh(
@@ -194,10 +173,7 @@ for(let i=0;i<400;i++){
   scene.add(building);
 }
 
-//////////////////////
 // CAR
-//////////////////////
-
 const car = new THREE.Group();
 scene.add(car);
 
@@ -229,7 +205,7 @@ const glass = new THREE.Mesh(
 glass.position.set(0,5,-1);
 car.add(glass);
 
-const wheels=[];
+const wheels = [];
 function wheel(x,z){
   const w = new THREE.Mesh(
     new THREE.CylinderGeometry(1.5,1.5,1.2,32),
@@ -249,20 +225,14 @@ wheel(2.5,-4);
 
 car.position.y = 6;
 
-//////////////////////
 // CONTROLS
-//////////////////////
-
 let speed = 0;
 const keys = {};
 
 document.addEventListener("keydown", e => keys[e.key] = true);
 document.addEventListener("keyup", e => keys[e.key] = false);
 
-//////////////////////
 // POST-PROCESSING
-//////////////////////
-
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
 
@@ -272,20 +242,17 @@ const bloom = new UnrealBloomPass(
 );
 composer.addPass(bloom);
 
-//////////////////////
 // LOOP
-//////////////////////
-
 function animate(){
   requestAnimationFrame(animate);
 
-  if(keys["w"]) speed += 0.25;
-  if(keys["s"]) speed -= 0.25;
+  if (keys["w"]) speed += 0.25;
+  if (keys["s"]) speed -= 0.25;
 
   speed *= 0.98;
 
-  if(keys["a"]) car.rotation.y += 0.04*(speed/10);
-  if(keys["d"]) car.rotation.y -= 0.04*(speed/10);
+  if (keys["a"]) car.rotation.y += 0.04*(speed/10);
+  if (keys["d"]) car.rotation.y -= 0.04*(speed/10);
 
   car.translateZ(speed);
 
