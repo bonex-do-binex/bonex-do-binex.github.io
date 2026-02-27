@@ -2,11 +2,12 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Open World Racer – V1</title>
+  <title>Open World Racer – V2</title>
   <style>
-    body { margin:0; overflow:hidden; background:black; }
+    body { margin:0; overflow:hidden; background:#020205; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    #ui { position: absolute; bottom: 30px; left: 30px; color: #00f2ff; font-size: 24px; letter-spacing: 2px; text-shadow: 0 0 10px #00f2ff; }
+    #instructions { position: absolute; top: 20px; left: 20px; color: rgba(255,255,255,0.5); font-size: 12px; }
   </style>
-
   <script type="importmap">
     {
       "imports": {
@@ -17,8 +18,8 @@
   </script>
 </head>
 <body>
-
-<script type="module" src="game.js"></script>
-
+  <div id="instructions">WASD to Drive | Fast-paced Open World</div>
+  <div id="ui">KM/H: <span id="speed">0</span></div>
+  <script type="module" src="game.js"></script>
 </body>
 </html>
