@@ -2,153 +2,178 @@ import * as THREE from "three";
 import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
+import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
 
-// --- UI & LOADER ---
+// --- UI UPGRADE ---
 const loaderEl = document.getElementById("loader");
 const ui = document.createElement("div");
 ui.innerHTML = `
-    <div style="position:fixed;bottom:30px;right:50px;color:white;font-family:Arial;text-align:right;z-index:10;pointer-events:none;">
-        <span id="speedVal" style="font-size:90px;font-style:italic;font-weight:bold;text-shadow:3px 3px #000;">0</span>
-        <span style="font-size:24px;font-weight:bold;">KM/H</span>
+    <div style="position:fixed; bottom:40px; right:60px; color:#00f2ff; font-family:'Courier New', monospace; text-align:right; z-index:10; pointer-events:none; filter: drop-shadow(0 0 10px #00f2ff);">
+        <div style="font-size:14px; letter-spacing:4px; margin-bottom:-10px; opacity:0.8;">VELOCITY</div>
+        <span id="speedVal" style="font-size:110px; font-style:italic; font-weight:900;">0</span>
+        <span style="font-size:24px; margin-left:-10px;"> KM/H</span>
+        <div style="width:100%; height:4px; background:rgba(255,255,255,0.2); margin-top:5px;">
+            <div id="speedBar" style="width:0%; height:100%; background:#00f2ff; transition: width 0.1s;"></div>
+        </div>
     </div>
 `;
 document.body.appendChild(ui);
 const speedValEl = document.getElementById("speedVal");
+const speedBarEl = document.getElementById("speedBar");
 
-// --- SCENE SETUP ---
+// --- SCENE & COSMETICS ---
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x87ceeb); // Sky blue
-scene.fog = new THREE.Fog(0x87ceeb, 50, 1000);
+scene.background = new THREE.Color(0x020205); // Deep space blue/black
+scene.fog = new THREE.FogExp2(0x020205, 0.002);
 
-const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 5000);
+const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 5000);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
-renderer.toneMapping = THREE.ReinhardToneMapping;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
 document.body.appendChild(renderer.domElement);
 
-// --- LIGHTS ---
-scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 1.0));
-const sun = new THREE.DirectionalLight(0xffffff, 1.5);
-sun.position.set(100, 200, 50);
-sun.castShadow = true;
-sun.shadow.camera.left = -100;
-sun.shadow.camera.right = 100;
-sun.shadow.camera.top = 100;
-sun.shadow.camera.bottom = -100;
-scene.add(sun);
+// --- LIGHTING (Neon/Night Style) ---
+const ambient = new THREE.AmbientLight(0x404040, 0.5); 
+scene.add(ambient);
+
+const moonLight = new THREE.DirectionalLight(0x5555ff, 0.8);
+moonLight.position.set(50, 100, 50);
+scene.add(moonLight);
 
 // --- ENVIRONMENT ---
-const ground = new THREE.Mesh(
-    new THREE.PlaneGeometry(10000, 10000), 
-    new THREE.MeshStandardMaterial({ color: 0x3d5a80 }) 
-);
-ground.rotation.x = -Math.PI / 2;
-ground.receiveShadow = true;
-scene.add(ground);
+// Ground with Grid
+const grid = new THREE.GridHelper(10000, 200, 0x00f2ff, 0x222222);
+grid.position.y = 0.01;
+scene.add(grid);
 
-const road = new THREE.Mesh(
-    new THREE.PlaneGeometry(40, 10000), 
-    new THREE.MeshStandardMaterial({ color: 0x222222 })
-);
+const roadGeo = new THREE.PlaneGeometry(50, 10000);
+const roadMat = new THREE.MeshStandardMaterial({ 
+    color: 0x111111, 
+    roughness: 0.1, 
+    metalness: 0.5 
+});
+const road = new THREE.Mesh(roadGeo, roadMat);
 road.rotation.x = -Math.PI / 2;
-road.position.y = 0.05;
 road.receiveShadow = true;
 scene.add(road);
 
-// Add simple road markers
-for(let i = -5000; i < 5000; i += 100) {
-    const marker = new THREE.Mesh(new THREE.PlaneGeometry(1, 20), new THREE.MeshStandardMaterial({color: 0xffffff}));
-    marker.rotation.x = -Math.PI / 2;
-    marker.position.set(0, 0.07, i);
-    scene.add(marker);
-}
+// Neon Road Edges
+const edgeGeo = new THREE.BoxGeometry(1, 0.5, 10000);
+const edgeMat = new THREE.MeshStandardMaterial({ color: 0x00f2ff, emissive: 0x00f2ff, emissiveIntensity: 2 });
+const leftEdge = new THREE.Mesh(edgeGeo, edgeMat);
+leftEdge.position.set(-25, 0.25, 0);
+scene.add(leftEdge);
 
-// --- CAR ---
+const rightEdge = leftEdge.clone();
+rightEdge.position.set(25, 0.25, 0);
+scene.add(rightEdge);
+
+// --- CAR UPGRADE ---
 const car = new THREE.Group();
-const carBody = new THREE.Mesh(
-    new THREE.BoxGeometry(4, 1.2, 8), 
-    new THREE.MeshStandardMaterial({ color: 0xd90429, roughness: 0.2 })
-);
-carBody.position.y = 1.2;
-carBody.castShadow = true;
-car.add(carBody);
 
-const cabin = new THREE.Mesh(
-    new THREE.BoxGeometry(3.5, 1, 4),
-    new THREE.MeshStandardMaterial({ color: 0x111111 })
+// Car Base (Sleek Red)
+const body = new THREE.Mesh(
+    new THREE.BoxGeometry(4, 1, 8), 
+    new THREE.MeshStandardMaterial({ color: 0xff0000, metalness: 0.8, roughness: 0.2 })
 );
-cabin.position.set(0, 2.2, -0.5);
+body.position.y = 0.8;
+body.castShadow = true;
+car.add(body);
+
+// Cabin (Glass-like)
+const cabin = new THREE.Mesh(
+    new THREE.BoxGeometry(3.2, 0.8, 3),
+    new THREE.MeshStandardMaterial({ color: 0x000000, metalness: 1, roughness: 0, opacity: 0.7, transparent: true })
+);
+cabin.position.set(0, 1.7, -0.5);
 car.add(cabin);
 
-const wheels = [];
-const wheelGeo = new THREE.CylinderGeometry(0.8, 0.8, 0.6, 16);
-const wheelMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
-const wheelPos = [[2, 0.8, 2.5], [-2, 0.8, 2.5], [2, 0.8, -2.5], [-2, 0.8, -2.5]];
+// Headlights (The "Forza" Look)
+const lightGeo = new THREE.PlaneGeometry(1.2, 0.5);
+const lightMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+const leftLight = new THREE.Mesh(lightGeo, lightMat);
+leftLight.position.set(1.4, 0.8, 4.01);
+car.add(leftLight);
 
-wheelPos.forEach(p => {
-    const w = new THREE.Mesh(wheelGeo, wheelMat);
-    w.rotation.z = Math.PI / 2;
-    w.position.set(...p);
-    car.add(w);
-    wheels.push(w);
-});
+const rightLight = leftLight.clone();
+rightLight.position.x = -1.4;
+car.add(rightLight);
+
+// Spotlights (Actual light beams)
+const headLamp = new THREE.SpotLight(0xffffff, 50, 100, 0.5, 0.5);
+headLamp.position.set(0, 1, 4);
+headLamp.target = new THREE.Object3D();
+car.add(headLamp);
+car.add(headLamp.target);
+headLamp.target.position.set(0, 0, 10);
+
 scene.add(car);
 
 // --- POST PROCESSING ---
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
-const bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.4, 0.4, 0.85);
-composer.addPass(bloom);
 
-// --- CONTROLS & PHYSICS ---
+// High Bloom for Neon Effect
+const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
+composer.addPass(bloomPass);
+
+// --- CONTROLS ---
 let speed = 0;
 const keys = {};
 window.addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
 window.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
 
-// RESIZE HANDLER
-window.addEventListener('resize', () => {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    composer.setSize(window.innerWidth, window.innerHeight);
-});
-
-// INITIALIZE: Hide loader after setup
-setTimeout(() => { loaderEl.style.display = "none"; }, 500);
+// Initialization
+setTimeout(() => { loaderEl.style.display = "none"; }, 800);
 
 const clock = new THREE.Clock();
 function animate() {
     requestAnimationFrame(animate);
     const delta = clock.getDelta();
 
-    // Physics
-    if (keys["w"]) speed += 40 * delta;
-    if (keys["s"]) speed -= 60 * delta;
-    
-    speed *= 0.98; // Friction
-    speed = Math.max(-20, Math.min(120, speed)); // Max speed 120
+    // Smoother Acceleration
+    if (keys["w"]) speed += 55 * delta;
+    if (keys["s"]) speed -= 80 * delta;
+    speed *= 0.99; 
+    speed = Math.max(0, Math.min(160, speed));
 
-    const turnSpeed = (speed / 100) + 0.5; 
-    if (keys["a"]) car.rotation.y += 2 * turnSpeed * delta;
-    if (keys["d"]) car.rotation.y -= 2 * turnSpeed * delta;
+    // Steering with "Body Roll"
+    const steerLimit = (speed / 160) + 0.5;
+    if (keys["a"]) {
+        car.rotation.y += 1.8 * steerLimit * delta;
+        body.rotation.z = THREE.MathUtils.lerp(body.rotation.z, 0.1, 0.1);
+    } else if (keys["d"]) {
+        car.rotation.y -= 1.8 * steerLimit * delta;
+        body.rotation.z = THREE.MathUtils.lerp(body.rotation.z, -0.1, 0.1);
+    } else {
+        body.rotation.z = THREE.MathUtils.lerp(body.rotation.z, 0, 0.1);
+    }
 
     car.translateZ(speed * delta);
-    
-    // Animate wheels
-    wheels.forEach(w => w.rotation.x -= speed * delta * 2);
 
-    // Smooth Chase Camera
-    const relativeCameraOffset = new THREE.Vector3(0, 6, -18);
-    const cameraOffset = relativeCameraOffset.applyMatrix4(car.matrixWorld);
-    camera.position.lerp(cameraOffset, 0.1);
-    camera.lookAt(car.position.x, car.position.y + 2, car.position.z);
+    // Dynamic Camera (FOV stretches at high speed)
+    camera.fov = 60 + (speed * 0.15);
+    camera.updateProjectionMatrix();
 
-    // UI
-    speedValEl.innerText = Math.abs(Math.round(speed * 2.5));
+    const cameraOffset = new THREE.Vector3(0, 7, -20).applyMatrix4(car.matrixWorld);
+    camera.position.lerp(cameraOffset, 0.12);
+    camera.lookAt(car.position.x, car.position.y + 1, car.position.z);
+
+    // UI Updates
+    const displaySpeed = Math.round(speed * 2.2);
+    speedValEl.innerText = displaySpeed;
+    speedBarEl.style.width = `${(speed / 160) * 100}%`;
 
     composer.render();
 }
 
 animate();
+
+window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    composer.setSize(window.innerWidth, window.innerHeight);
+});
