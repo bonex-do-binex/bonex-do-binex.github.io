@@ -8,9 +8,9 @@
         body { margin: 0; overflow: hidden; background: #000; }
         #loader {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: #111; display: flex; justify-content: center;
-            align-items: center; color: white; font-family: 'Segoe UI', sans-serif;
-            z-index: 100; font-weight: bold; letter-spacing: 2px;
+            background: #020205; display: flex; justify-content: center;
+            align-items: center; color: #00f2ff; font-family: 'Courier New', monospace;
+            z-index: 100; font-weight: bold; letter-spacing: 4px;
         }
     </style>
 
@@ -18,14 +18,14 @@
     {
         "imports": {
             "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm,
+            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
             "./map.js": "./map.js"
         }
     }
     </script>
 </head>
 <body>
-    <div id="loader">LOADING ENGINE...</div>
+    <div id="loader">INITIALIZING ENGINE...</div>
     <script type="module" src="game.js"></script>
 </body>
 </html>
