@@ -1,3 +1,5 @@
+console.log("%c[FORZA_WEBGL] Engine v2.0 - Elevation & Drift Fixes Active", "color: #00f2ff; font-weight: bold; font-size: 14px;");
+
 import * as THREE from "three";
 import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
@@ -43,7 +45,7 @@ const sun = new THREE.DirectionalLight(0xffffff, 1.2);
 sun.position.set(200, 500, 200);
 scene.add(sun);
 
-// Fetching the map and the mathematical curve
+// Map and Path Data
 const { mapGroup, curve } = createMap(scene);
 
 // --- SPEED LINES VFX ---
@@ -83,7 +85,7 @@ const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
 composer.addPass(new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.3, 0.4, 0.85));
 
-// --- GAME STATE ---
+// --- STATE ---
 let speed = 0;
 let driftAngle = 0;
 let nitroCharge = 100;
@@ -97,7 +99,7 @@ function animate() {
     requestAnimationFrame(animate);
     const delta = clock.getDelta();
 
-    // Map Z to Curve Progress (0 to 1)
+    // Progression
     const progress = (car.position.z + 5000) / 15000;
     let isOnRoad = true;
 
@@ -105,18 +107,18 @@ function animate() {
         const roadPoint = curve.getPointAt(progress);
         const tangent = curve.getTangentAt(progress);
         
-        // ROAD BOUNDARY CHECK
+        // ROAD BOUNDARY CHECK (Fix: Width matched to map.js)
         if (Math.abs(car.position.x - roadPoint.x) > 28) isOnRoad = false;
 
         // ELEVATION SNAPPING
         car.position.y = THREE.MathUtils.lerp(car.position.y, roadPoint.y, 0.15);
         
-        // PITCH (Uphill/Downhill tilt)
+        // PITCH
         const slopeAngle = -Math.atan2(tangent.y, tangent.z);
         car.rotation.x = THREE.MathUtils.lerp(car.rotation.x, slopeAngle, 0.1);
     }
 
-    // --- PHYSICS & NITRO ---
+    // --- LOGIC ---
     const isDrifting = keys["shift"] && speed > 40 && (keys["a"] || keys["d"]);
     const isNitro = keys[" "] && nitroCharge > 0 && speed > 20;
     
@@ -128,7 +130,7 @@ function animate() {
         accel = 180;
         nitroCharge -= 40 * delta;
     } else if (nitroCharge < 100) {
-        nitroCharge += (isDrifting ? 15 : 5) * delta; // Faster recharge while drifting
+        nitroCharge += (isDrifting ? 15 : 5) * delta; 
     }
 
     let friction = isDrifting ? 0.975 : (isOnRoad ? 0.992 : 0.94);
@@ -138,7 +140,7 @@ function animate() {
     speed *= friction;
     speed = Math.max(0, Math.min(isNitro ? 240 : 180, speed));
 
-    // --- STEERING ---
+    // Steering
     const steerPower = isDrifting ? 3.8 : 2.2;
     if (keys["a"]) {
         car.rotation.y += steerPower * delta;
@@ -151,12 +153,12 @@ function animate() {
     }
     
     carBodyContainer.rotation.y = driftAngle;
-    carBodyContainer.rotation.z = -driftAngle * 0.4; // Visual roll
+    carBodyContainer.rotation.z = -driftAngle * 0.4; 
 
     car.translateZ(speed * delta);
     wheels.forEach(w => w.rotation.x -= speed * delta * 2.5);
 
-    // --- VFX: SPEED LINES ---
+    // VFX
     if (speed > 100) {
         speedLinesMat.opacity = THREE.MathUtils.mapLinear(speed, 100, 240, 0, 0.6);
         for(let i=0; i<speedLinesCount; i++) {
@@ -180,12 +182,12 @@ function animate() {
         speedLinesMat.opacity = 0;
     }
 
-    // --- CAMERA & SCREEN SHAKE ---
+    // Camera
     camera.fov = 60 + (speed * 0.18);
     camera.updateProjectionMatrix();
 
     const camTargetPos = new THREE.Vector3(0, 9, -24).applyMatrix4(car.matrixWorld);
-    camera.position.lerp(camTargetPos, 0.08); // Lower = smoother follow
+    camera.position.lerp(camTargetPos, 0.08); 
 
     if ((!isOnRoad || isNitro) && speed > 20) {
         const intensity = isNitro ? 0.08 : (speed * 0.008);
@@ -200,7 +202,7 @@ function animate() {
 
     camera.lookAt(car.position.x, car.position.y + 2, car.position.z);
     
-    // UI UPDATES
+    // UI Update
     const kmh = Math.round(speed * 2.5);
     speedValEl.innerText = kmh;
     speedBarEl.style.width = `${(speed / 180) * 100}%`;
