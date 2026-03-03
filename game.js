@@ -10,6 +10,7 @@ const ui = document.createElement("div");
 ui.innerHTML = `
     <div style="position:fixed; bottom:40px; right:60px; color:#ffffff; font-family:'Arial', sans-serif; text-align:right; z-index:10; pointer-events:none; filter: drop-shadow(2px 2px 4px rgba(0,0,0,0.5));">
         <div id="driftStatus" style="font-size:18px; font-weight:bold; color:#f1c40f; display:none;">DRIFTING</div>
+        <div id="nitroStatus" style="font-size:14px; font-weight:bold; color:#00f2ff; display:none;">NITRO READY (SPACE)</div>
         <div id="status" style="font-size:14px; letter-spacing:2px; font-weight:bold; color:#2ecc71;">STABLE</div>
         <span id="speedVal" style="font-size:110px; font-style:italic; font-weight:900;">0</span>
         <span style="font-size:24px; font-weight:bold;"> KM/H</span>
@@ -23,6 +24,7 @@ const speedValEl = document.getElementById("speedVal");
 const speedBarEl = document.getElementById("speedBar");
 const statusEl = document.getElementById("status");
 const driftStatusEl = document.getElementById("driftStatus");
+const nitroStatusEl = document.getElementById("nitroStatus");
 
 // --- SCENE SETUP ---
 const scene = new THREE.Scene();
@@ -41,12 +43,13 @@ const sun = new THREE.DirectionalLight(0xffffff, 1.2);
 sun.position.set(200, 500, 200);
 scene.add(sun);
 
+// Fetching the map and the mathematical curve
 const { mapGroup, curve } = createMap(scene);
 
 // --- SPEED LINES VFX ---
-const speedLinesCount = 40;
+const speedLinesCount = 60;
 const speedLinesGeo = new THREE.BufferGeometry();
-const speedLinePos = new Float32Array(speedLinesCount * 6); // 2 points per line
+const speedLinePos = new Float32Array(speedLinesCount * 6);
 speedLinesGeo.setAttribute('position', new THREE.BufferAttribute(speedLinePos, 3));
 const speedLinesMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0 });
 const speedLines = new THREE.LineSegments(speedLinesGeo, speedLinesMat);
@@ -80,9 +83,10 @@ const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
 composer.addPass(new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.3, 0.4, 0.85));
 
-// --- PHYSICS VARIABLES ---
+// --- GAME STATE ---
 let speed = 0;
 let driftAngle = 0;
+let nitroCharge = 100;
 const keys = {};
 window.addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
 window.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
@@ -93,68 +97,81 @@ function animate() {
     requestAnimationFrame(animate);
     const delta = clock.getDelta();
 
+    // Map Z to Curve Progress (0 to 1)
     const progress = (car.position.z + 5000) / 15000;
     let isOnRoad = true;
-    let roadCenter = new THREE.Vector3(0,0,0);
 
     if (progress >= 0 && progress <= 1) {
-        roadCenter = curve.getPointAt(progress);
-        if (Math.abs(car.position.x - roadCenter.x) > 25) isOnRoad = false;
-
-        // Elevation & Slope
-        const targetPos = curve.getPointAt(progress);
+        const roadPoint = curve.getPointAt(progress);
         const tangent = curve.getTangentAt(progress);
-        car.position.y = THREE.MathUtils.lerp(car.position.y, targetPos.y, 0.2);
-        car.rotation.x = THREE.MathUtils.lerp(car.rotation.x, -Math.atan2(tangent.y, tangent.z), 0.1);
+        
+        // ROAD BOUNDARY CHECK
+        if (Math.abs(car.position.x - roadPoint.x) > 28) isOnRoad = false;
+
+        // ELEVATION SNAPPING
+        car.position.y = THREE.MathUtils.lerp(car.position.y, roadPoint.y, 0.15);
+        
+        // PITCH (Uphill/Downhill tilt)
+        const slopeAngle = -Math.atan2(tangent.y, tangent.z);
+        car.rotation.x = THREE.MathUtils.lerp(car.rotation.x, slopeAngle, 0.1);
     }
 
-    // --- DRIFT LOGIC ---
+    // --- PHYSICS & NITRO ---
     const isDrifting = keys["shift"] && speed > 40 && (keys["a"] || keys["d"]);
+    const isNitro = keys[" "] && nitroCharge > 0 && speed > 20;
+    
     driftStatusEl.style.display = isDrifting ? "block" : "none";
+    nitroStatusEl.style.display = (nitroCharge > 10) ? "block" : "none";
 
     let accel = isOnRoad ? 60 : 20;
-    let friction = isDrifting ? 0.97 : (isOnRoad ? 0.99 : 0.94);
+    if (isNitro) {
+        accel = 180;
+        nitroCharge -= 40 * delta;
+    } else if (nitroCharge < 100) {
+        nitroCharge += (isDrifting ? 15 : 5) * delta; // Faster recharge while drifting
+    }
 
+    let friction = isDrifting ? 0.975 : (isOnRoad ? 0.992 : 0.94);
     if (keys["w"]) speed += accel * delta;
-    if (keys["s"]) speed -= 100 * delta;
+    if (keys["s"]) speed -= 120 * delta;
+    
     speed *= friction;
-    speed = Math.max(0, Math.min(180, speed));
+    speed = Math.max(0, Math.min(isNitro ? 240 : 180, speed));
 
-    // Steering
-    const steerPower = isDrifting ? 3.5 : 2.0;
+    // --- STEERING ---
+    const steerPower = isDrifting ? 3.8 : 2.2;
     if (keys["a"]) {
         car.rotation.y += steerPower * delta;
-        driftAngle = THREE.MathUtils.lerp(driftAngle, isDrifting ? 0.4 : 0.1, 0.1);
+        driftAngle = THREE.MathUtils.lerp(driftAngle, isDrifting ? 0.45 : 0.1, 0.1);
     } else if (keys["d"]) {
         car.rotation.y -= steerPower * delta;
-        driftAngle = THREE.MathUtils.lerp(driftAngle, isDrifting ? -0.4 : -0.1, 0.1);
+        driftAngle = THREE.MathUtils.lerp(driftAngle, isDrifting ? -0.45 : -0.1, 0.1);
     } else {
         driftAngle = THREE.MathUtils.lerp(driftAngle, 0, 0.1);
     }
     
-    // Apply visual drift lean and swing
     carBodyContainer.rotation.y = driftAngle;
-    carBodyContainer.rotation.z = -driftAngle * 0.5;
+    carBodyContainer.rotation.z = -driftAngle * 0.4; // Visual roll
 
     car.translateZ(speed * delta);
-    wheels.forEach(w => w.rotation.x -= speed * delta * 2);
+    wheels.forEach(w => w.rotation.x -= speed * delta * 2.5);
 
-    // --- SPEED LINES VFX ---
-    if (speed > 80) {
-        speedLinesMat.opacity = THREE.MathUtils.mapLinear(speed, 80, 180, 0, 0.5);
+    // --- VFX: SPEED LINES ---
+    if (speed > 100) {
+        speedLinesMat.opacity = THREE.MathUtils.mapLinear(speed, 100, 240, 0, 0.6);
         for(let i=0; i<speedLinesCount; i++) {
             const idx = i * 6;
-            if (speedLinePos[idx+2] > 50) { // Reset line when it goes past
-                const rx = (Math.random() - 0.5) * 40;
-                const ry = (Math.random() - 0.5) * 20;
-                const rz = -50 - Math.random() * 50;
+            if (speedLinePos[idx+2] > 60) {
+                const rx = (Math.random() - 0.5) * 50;
+                const ry = (Math.random() - 0.5) * 30;
+                const rz = -60 - Math.random() * 60;
                 speedLinePos[idx] = speedLinePos[idx+3] = rx;
                 speedLinePos[idx+1] = speedLinePos[idx+4] = ry;
                 speedLinePos[idx+2] = rz;
-                speedLinePos[idx+5] = rz - 10;
+                speedLinePos[idx+5] = rz - 15;
             }
-            speedLinePos[idx+2] += speed * delta * 2;
-            speedLinePos[idx+5] += speed * delta * 2;
+            speedLinePos[idx+2] += speed * delta * 2.5;
+            speedLinePos[idx+5] += speed * delta * 2.5;
         }
         speedLines.position.copy(car.position);
         speedLines.quaternion.copy(car.quaternion);
@@ -163,19 +180,19 @@ function animate() {
         speedLinesMat.opacity = 0;
     }
 
-    // --- COLLISION/SHAKE LOGIC ---
-    camera.fov = 60 + (speed * 0.15);
+    // --- CAMERA & SCREEN SHAKE ---
+    camera.fov = 60 + (speed * 0.18);
     camera.updateProjectionMatrix();
 
-    const camOffset = new THREE.Vector3(0, 8, -22).applyMatrix4(car.matrixWorld);
-    camera.position.lerp(camOffset, 0.1);
+    const camTargetPos = new THREE.Vector3(0, 9, -24).applyMatrix4(car.matrixWorld);
+    camera.position.lerp(camTargetPos, 0.08); // Lower = smoother follow
 
-    if (!isOnRoad && speed > 20) {
-        const shake = (speed * 0.006);
-        camera.position.x += (Math.random() - 0.5) * shake;
-        camera.position.y += (Math.random() - 0.5) * shake;
-        statusEl.innerText = "OFF-ROAD";
-        statusEl.style.color = "#e74c3c";
+    if ((!isOnRoad || isNitro) && speed > 20) {
+        const intensity = isNitro ? 0.08 : (speed * 0.008);
+        camera.position.x += (Math.random() - 0.5) * intensity;
+        camera.position.y += (Math.random() - 0.5) * intensity;
+        statusEl.innerText = isNitro ? "NITRO BOOST" : "OFF-ROAD";
+        statusEl.style.color = isNitro ? "#00f2ff" : "#e74c3c";
     } else {
         statusEl.innerText = "STABLE";
         statusEl.style.color = "#2ecc71";
@@ -183,10 +200,11 @@ function animate() {
 
     camera.lookAt(car.position.x, car.position.y + 2, car.position.z);
     
-    // Update UI
-    speedValEl.innerText = Math.round(speed * 2.5);
+    // UI UPDATES
+    const kmh = Math.round(speed * 2.5);
+    speedValEl.innerText = kmh;
     speedBarEl.style.width = `${(speed / 180) * 100}%`;
-    speedBarEl.style.background = isDrifting ? "#f1c40f" : (isOnRoad ? "#2ecc71" : "#e74c3c");
+    speedBarEl.style.background = isNitro ? "#00f2ff" : (isDrifting ? "#f1c40f" : (isOnRoad ? "#2ecc71" : "#e74c3c"));
 
     if (car.position.z > 9500) car.position.z = -4800;
     composer.render();
@@ -194,8 +212,10 @@ function animate() {
 
 setTimeout(() => { loaderEl.style.display = "none"; }, 1000);
 animate();
+
 window.addEventListener('resize', () => {
     renderer.setSize(window.innerWidth, window.innerHeight);
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
+    composer.setSize(window.innerWidth, window.innerHeight);
 });
