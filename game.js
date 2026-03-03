@@ -2,9 +2,9 @@ import * as THREE from "three";
 import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
-import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
+import { createMap } from "./map.js";
 
-// --- UI UPGRADE ---
+// --- UI & LOADER ---
 const loaderEl = document.getElementById("loader");
 const ui = document.createElement("div");
 ui.innerHTML = `
@@ -21,103 +21,76 @@ document.body.appendChild(ui);
 const speedValEl = document.getElementById("speedVal");
 const speedBarEl = document.getElementById("speedBar");
 
-// --- SCENE & COSMETICS ---
+// --- SCENE SETUP ---
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x020205); // Deep space blue/black
+scene.background = new THREE.Color(0x020205);
 scene.fog = new THREE.FogExp2(0x020205, 0.002);
 
 const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 5000);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 document.body.appendChild(renderer.domElement);
 
-// --- LIGHTING (Neon/Night Style) ---
-const ambient = new THREE.AmbientLight(0x404040, 0.5); 
-scene.add(ambient);
-
-const moonLight = new THREE.DirectionalLight(0x5555ff, 0.8);
+// --- LIGHTING ---
+scene.add(new THREE.AmbientLight(0x404040, 0.6));
+const moonLight = new THREE.DirectionalLight(0x5555ff, 1.0);
 moonLight.position.set(50, 100, 50);
 scene.add(moonLight);
 
-// --- ENVIRONMENT ---
-// Ground with Grid
-const grid = new THREE.GridHelper(10000, 200, 0x00f2ff, 0x222222);
-grid.position.y = 0.01;
-scene.add(grid);
+// --- MAP & ENVIRONMENT ---
+const mapData = createMap(scene); // This calls your map.js logic
 
-const roadGeo = new THREE.PlaneGeometry(50, 10000);
-const roadMat = new THREE.MeshStandardMaterial({ 
-    color: 0x111111, 
-    roughness: 0.1, 
-    metalness: 0.5 
-});
+const roadGeo = new THREE.PlaneGeometry(60, 20000);
+const roadMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.2, metalness: 0.5 });
 const road = new THREE.Mesh(roadGeo, roadMat);
 road.rotation.x = -Math.PI / 2;
 road.receiveShadow = true;
 scene.add(road);
 
-// Neon Road Edges
-const edgeGeo = new THREE.BoxGeometry(1, 0.5, 10000);
-const edgeMat = new THREE.MeshStandardMaterial({ color: 0x00f2ff, emissive: 0x00f2ff, emissiveIntensity: 2 });
-const leftEdge = new THREE.Mesh(edgeGeo, edgeMat);
-leftEdge.position.set(-25, 0.25, 0);
-scene.add(leftEdge);
-
-const rightEdge = leftEdge.clone();
-rightEdge.position.set(25, 0.25, 0);
-scene.add(rightEdge);
-
-// --- CAR UPGRADE ---
+// --- CAR ---
 const car = new THREE.Group();
-
-// Car Base (Sleek Red)
-const body = new THREE.Mesh(
+const carBody = new THREE.Mesh(
     new THREE.BoxGeometry(4, 1, 8), 
     new THREE.MeshStandardMaterial({ color: 0xff0000, metalness: 0.8, roughness: 0.2 })
 );
-body.position.y = 0.8;
-body.castShadow = true;
-car.add(body);
+carBody.position.y = 0.8;
+carBody.castShadow = true;
+car.add(carBody);
 
-// Cabin (Glass-like)
 const cabin = new THREE.Mesh(
     new THREE.BoxGeometry(3.2, 0.8, 3),
-    new THREE.MeshStandardMaterial({ color: 0x000000, metalness: 1, roughness: 0, opacity: 0.7, transparent: true })
+    new THREE.MeshStandardMaterial({ color: 0x000000, opacity: 0.8, transparent: true })
 );
 cabin.position.set(0, 1.7, -0.5);
 car.add(cabin);
 
-// Headlights (The "Forza" Look)
-const lightGeo = new THREE.PlaneGeometry(1.2, 0.5);
-const lightMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-const leftLight = new THREE.Mesh(lightGeo, lightMat);
-leftLight.position.set(1.4, 0.8, 4.01);
-car.add(leftLight);
+const wheels = [];
+const wheelGeo = new THREE.CylinderGeometry(0.8, 0.8, 0.7, 16);
+const wheelMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
+[ [2, 0.8, 2.5], [-2, 0.8, 2.5], [2, 0.8, -2.5], [-2, 0.8, -2.5] ].forEach(p => {
+    const w = new THREE.Mesh(wheelGeo, wheelMat);
+    w.rotation.z = Math.PI / 2;
+    w.position.set(...p);
+    car.add(w);
+    wheels.push(w);
+});
 
-const rightLight = leftLight.clone();
-rightLight.position.x = -1.4;
-car.add(rightLight);
-
-// Spotlights (Actual light beams)
-const headLamp = new THREE.SpotLight(0xffffff, 50, 100, 0.5, 0.5);
-headLamp.position.set(0, 1, 4);
-headLamp.target = new THREE.Object3D();
-car.add(headLamp);
-car.add(headLamp.target);
-headLamp.target.position.set(0, 0, 10);
+// Headlights
+const headLight = new THREE.SpotLight(0xffffff, 100, 150, 0.6, 0.5);
+headLight.position.set(0, 2, 4);
+car.add(headLight);
+car.add(headLight.target);
+headLight.target.position.set(0, 0, 20);
 
 scene.add(car);
 
 // --- POST PROCESSING ---
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
-
-// High Bloom for Neon Effect
-const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
-composer.addPass(bloomPass);
+const bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.2, 0.4, 0.85);
+composer.addPass(bloom);
 
 // --- CONTROLS ---
 let speed = 0;
@@ -125,52 +98,57 @@ const keys = {};
 window.addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
 window.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
 
-// Initialization
-setTimeout(() => { loaderEl.style.display = "none"; }, 800);
-
+// --- GAME LOOP ---
 const clock = new THREE.Clock();
 function animate() {
     requestAnimationFrame(animate);
     const delta = clock.getDelta();
 
-    // Smoother Acceleration
-    if (keys["w"]) speed += 55 * delta;
-    if (keys["s"]) speed -= 80 * delta;
-    speed *= 0.99; 
-    speed = Math.max(0, Math.min(160, speed));
+    // Movement Physics
+    if (keys["w"]) speed += 60 * delta;
+    if (keys["s"]) speed -= 90 * delta;
+    speed *= 0.985; // Drag
+    speed = Math.max(0, Math.min(180, speed));
 
-    // Steering with "Body Roll"
-    const steerLimit = (speed / 160) + 0.5;
+    const turnFactor = (speed / 180) + 0.6;
     if (keys["a"]) {
-        car.rotation.y += 1.8 * steerLimit * delta;
-        body.rotation.z = THREE.MathUtils.lerp(body.rotation.z, 0.1, 0.1);
+        car.rotation.y += 2.0 * turnFactor * delta;
+        carBody.rotation.z = THREE.MathUtils.lerp(carBody.rotation.z, 0.12, 0.1);
     } else if (keys["d"]) {
-        car.rotation.y -= 1.8 * steerLimit * delta;
-        body.rotation.z = THREE.MathUtils.lerp(body.rotation.z, -0.1, 0.1);
+        car.rotation.y -= 2.0 * turnFactor * delta;
+        carBody.rotation.z = THREE.MathUtils.lerp(carBody.rotation.z, -0.12, 0.1);
     } else {
-        body.rotation.z = THREE.MathUtils.lerp(body.rotation.z, 0, 0.1);
+        carBody.rotation.z = THREE.MathUtils.lerp(carBody.rotation.z, 0, 0.1);
     }
 
     car.translateZ(speed * delta);
+    wheels.forEach(w => w.rotation.x -= speed * delta * 2);
 
-    // Dynamic Camera (FOV stretches at high speed)
+    // Infinite Road Logic (Teleport back if you go too far)
+    if (car.position.z > 5000) car.position.z = -5000;
+    if (car.position.z < -5000) car.position.z = 5000;
+
+    // Smooth Chase Camera with FOV Effect
     camera.fov = 60 + (speed * 0.15);
     camera.updateProjectionMatrix();
-
-    const cameraOffset = new THREE.Vector3(0, 7, -20).applyMatrix4(car.matrixWorld);
-    camera.position.lerp(cameraOffset, 0.12);
+    
+    const camOffset = new THREE.Vector3(0, 8, -22).applyMatrix4(car.matrixWorld);
+    camera.position.lerp(camOffset, 0.1);
     camera.lookAt(car.position.x, car.position.y + 1, car.position.z);
 
-    // UI Updates
-    const displaySpeed = Math.round(speed * 2.2);
-    speedValEl.innerText = displaySpeed;
-    speedBarEl.style.width = `${(speed / 160) * 100}%`;
+    // Update UI
+    const kmh = Math.round(speed * 2.5);
+    speedValEl.innerText = kmh;
+    speedBarEl.style.width = `${(speed / 180) * 100}%`;
 
     composer.render();
 }
 
+// Start Game
+setTimeout(() => { loaderEl.style.display = "none"; }, 1000);
 animate();
 
+// Resize
 window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
