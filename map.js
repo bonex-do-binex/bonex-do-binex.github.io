@@ -14,25 +14,30 @@ export function createMap(scene) {
     }
     const curve = new THREE.CatmullRomCurve3(points);
 
-    // --- 2. THE ROAD (Fixed Geometry) ---
-    // We give the road a tiny bit of depth (0.1) so Three.js handles the faces better
+    // Compute frames once to reuse for road and line
+    // This keeps the "up" vector consistent
+    const extrudeFrames = curve.computeFrenetFrames(600, false);
+
+    // --- 2. THE ROAD ---
+    // Swapped coordinates so the width is on the X axis and thickness is on the Y
     const roadShape = new THREE.Shape();
     roadShape.moveTo(-25, 0);
     roadShape.lineTo(25, 0);
-    roadShape.lineTo(25, -0.2); // Small thickness to prevent "wall" glitching
-    roadShape.lineTo(-25, -0.2);
+    roadShape.lineTo(25, -0.5); 
+    roadShape.lineTo(-25, -0.5);
     roadShape.lineTo(-25, 0);
 
     const extrudeSettings = {
-        steps: 600, // Increased steps for smoother curves
+        steps: 600,
         bevelEnabled: false,
-        extrudePath: curve
+        extrudePath: curve,
+        frames: extrudeFrames // Prevents the road from flipping sideways
     };
 
     const roadGeo = new THREE.ExtrudeGeometry(roadShape, extrudeSettings);
     const roadMat = new THREE.MeshStandardMaterial({ 
         color: 0x222222, 
-        roughness: 0.9,
+        roughness: 0.8,
         flatShading: false 
     });
     const roadMesh = new THREE.Mesh(roadGeo, roadMat);
@@ -40,12 +45,12 @@ export function createMap(scene) {
     mapGroup.add(roadMesh);
 
     // --- 3. THE CENTER LINE ---
-    // Slightly offset the center line on the Y axis to prevent Z-fighting (flickering)
+    // Raised slightly (0.1) above the road surface to prevent Z-fighting
     const lineShape = new THREE.Shape();
-    lineShape.moveTo(-0.5, 0.05);
+    lineShape.moveTo(-0.5, 0.1);
+    lineShape.lineTo(0.5, 0.1);
     lineShape.lineTo(0.5, 0.05);
-    lineShape.lineTo(0.5, 0.04);
-    lineShape.lineTo(-0.5, 0.04);
+    lineShape.lineTo(-0.5, 0.05);
 
     const lineGeo = new THREE.ExtrudeGeometry(lineShape, extrudeSettings);
     const lineMesh = new THREE.Mesh(lineGeo, new THREE.MeshBasicMaterial({ color: 0xffffff }));
@@ -56,7 +61,7 @@ export function createMap(scene) {
     const groundMat = new THREE.MeshStandardMaterial({ color: 0x1b4332 });
     const ground = new THREE.Mesh(groundGeo, groundMat);
     ground.rotation.x = -Math.PI / 2;
-    ground.position.y = -60; 
+    ground.position.y = -100; // Lowered to ensure it stays below the road's lowest dip
     mapGroup.add(ground);
 
     // --- 5. SCENERY ---
@@ -72,6 +77,7 @@ export function createMap(scene) {
 
         if (Math.random() > 0.4) {
             const mount = new THREE.Mesh(mountGeo, mountMat);
+            // Mountains placed further out
             mount.position.set(pos.x + (side * (300 + Math.random() * 200)), pos.y - 50, pos.z);
             mount.rotation.y = Math.random() * Math.PI;
             mapGroup.add(mount);
@@ -82,16 +88,16 @@ export function createMap(scene) {
         const leaves = new THREE.Mesh(treeLeavesGeo, new THREE.MeshStandardMaterial({ color: 0x081c15 }));
         leaves.position.y = 8;
         tree.add(trunk, leaves);
-        tree.position.set(pos.x + (side * (60 + Math.random() * 40)), pos.y, pos.z);
+        // Trees placed closer to the road edge
+        tree.position.set(pos.x + (side * (40 + Math.random() * 40)), pos.y, pos.z);
         mapGroup.add(tree);
     }
 
-    // --- 6. TIRE SMOKE PARTICLES (Added for Drifting) ---
+    // --- 6. TIRE SMOKE PARTICLES ---
     const smokeGroup = new THREE.Group();
     const smokeGeo = new THREE.SphereGeometry(0.5, 6, 6);
     const smokeMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.4 });
     
-    // We create a pool of particles to reuse for performance
     const smokeParticles = [];
     for(let i = 0; i < 50; i++) {
         const p = new THREE.Mesh(smokeGeo, smokeMat.clone());
